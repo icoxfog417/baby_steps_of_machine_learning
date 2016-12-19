@@ -70,9 +70,10 @@ Jupyter Notebookを立ち上げて、`worksheet.ipynb`を開いてください�
 精度の高いモデルを作るため、学習のスピードを上げるため、データをモデルにとって適切な形に加工する処理が欠かせません(生の食材を、調理するようなイメージです)。  
 多くの場合、この前処理が最終的な精度に大きなインパクトを与えます。今回は前処理の一つの手法である、正規化を実行してみます。
 
+正規化とは、各特徴について平均を0、標準偏差を1にそろえる処理です。これで学習速度の向上を図ることができます。  
+
 ![normalization.PNG](./pictures/normalization.PNG)
 
-正規化とは、各特徴について平均を0、標準偏差を1にそろえる処理です。これで学習速度の向上を図ることができます。  
 実際、身長や体重といった様々な特徴がある場合、その単位はバラバラでとる値の範囲も異なります。このままでは扱いづらいので、値の範囲をそろえるというのが正規化の役割です。  
 
 以下のコードを、`Data Preprocessing`の下に実装しましょう。正規化を行う`normalization`関数を実装し、それにより`digits.data`の正規化を行っています。
@@ -94,70 +95,47 @@ normalized_data = (digits.data - means) / stds  # normalization
 
 ## 3. Split the Training Data and Test Data
 
-機械学習においては、学習に使ったデータと評価用のデータは分ける必要があります。
+機械学習においては、学習に使ったデータと評価用のデータは分ける必要があります。  
+なぜかというと、モデルの評価というのは、人間でいうところの試験のようなものだからです。
+試験問題が事前に流出していたら正確な学力が測れないのと同じように、機械学習でもテストに使うデータは学習用のものとは分けておく必要があります。  
+※モデルの選抜のために、さらに検証用データにも分けておくことがあります。これは、成績優秀者を選抜して(検証)、その選抜した生徒の成績を測る(評価)、というイメージに近いです。
 
-ここでは、以下2つを実施します。
+ここでは、以下2つを実施してみます。
 
-* データを、学習用と評価用に分ける
+* データを、学習用と評価用に分ける(一般的には70:30、検証用データも作る場合は50:25:25くらい)
 * 学習データに対する精度と、評価データに対する精度をそれぞれ算出する
 
-学習データの分割を行には、[`cross_validation.train_test_split`](http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.train_test_split.html)を使用します。
-こちらを利用し、Training the Modelの前に、以下の処理を入れます。
+学習データの分割には、scikit-learnに用意されている[`sklearn.model_selection.train_test_split`](http://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html#sklearn.model_selection.train_test_split)が使えます。  
+こちらを利用し、Training the Modelの`write your code here`の個所を、以下のように書き換えます。
 
 ```py3
-def split_dataset(dataset, test_size=0.3):
-    from sklearn import cross_validation
-    from collections import namedtuple
-
-    DataSet = namedtuple("DataSet", ["data", "target"])
-    train_d, test_d, train_t, test_t = cross_validation.train_test_split(dataset.data, dataset.target, test_size=test_size, random_state=0)
-
-    left = DataSet(train_d, train_t)
-    right = DataSet(test_d, test_t)
-    
-    return left, right
+from sklearn.model_selection import train_test_split
 
 # use 30% of data to test the model
-training_set, test_set = split_dataset(digits, 0.3)
+test_size = 0.3
+train_d, test_d, train_t, test_t = train_test_split(normalized_data, digits.target, test_size=test_size, random_state=0)
 print("dataset is splited to train/test = {0} -> {1}, {2}".format(
-        len(digits.data), len(training_set.data), len(test_set.data))
+        len(normalized_data), len(train_d), len(test_d))
      )
-
 ```
 
-上記で`training_set`と`test_set`にデータを分割したので、Training the Modelを以下のように修正します。
+これで、Evaluate the Modelのコードを実行してみてください。精度は下がると思います。  
+これが要するに、カンニングしないできっちりテストしたときの、本当の精度ということになります。
 
-```
-classifier.fit(training_set.data, training_set.target)
-```
+この、学習の時の精度と評価の時の精度の差はとても重要な情報になります。
+これが大きいと、学習はうまくいっているのにいざ本番では精度が出ない、いわばブルペンエースのような状態になっていることになります。
 
-これで学習は完了しました。データを分割したおかげで、評価用のデータが30%分のこっています。これを使って学習していないデータに対する精度を計測することができます。
+![overfitting.PNG](./pictures/overfitting.PNG)
 
-Evaluate the Modelの精度計算部分を、以下のように修正します。
+これを**過学習**な状態といいます。これを防ぐためには、学習時の精度と評価時の精度をチェックしておく必要があります。これに利用できるのが、学習曲線というものです。
+
+Training the Modelの末尾に、以下のコードを追加して実行してみてください。
 
 ```py3
-print(calculate_accuracy(classifier, training_set))
-print(calculate_accuracy(classifier, test_set))
-```
+from sklearn.model_selection import learning_curve
 
-## 4. Evaluate the Model
 
-＜Handson #3 解説＞
-
-* 過学習になっていないか確認するため、学習データ・評価データそれぞれについての精度がどう変化しているかを測定します。
-* データ不均衡による「なんちゃって精度が高いモデル」を防ぐため、適合率・再現率を確認します。
-
-### 4.1 Check Accuracy
-
-以下のスクリプトで、学習/評価データに対する精度の推移を確認します。
-この、横軸に学習データ数、縦軸に精度を取ったグラフを学習曲線(learning curver)と呼び、scikit-learnでは[`sklearn.learning_curve`](http://scikit-learn.org/stable/modules/generated/sklearn.learning_curve.learning_curve.html)を利用することで簡単に描画することができます。
-
-```py3
 def plot_learning_curve(model_func, dataset):
-    from sklearn.learning_curve import learning_curve
-    import matplotlib.pyplot as plt
-    import numpy as np
-
     sizes = [i / 10 for i in range(1, 11)]
     train_sizes, train_scores, valid_scores = learning_curve(model_func(), dataset.data, dataset.target, train_sizes=sizes, cv=5)
     
@@ -172,26 +150,62 @@ def plot_learning_curve(model_func, dataset):
 plot_learning_curve(make_model, digits)
 ```
 
-追加し終わったら、実行してみて下さい。以下のように図がプロットされるはずです。
+そうすると、以下のようなグラフが表示されたと思います。これは、学習データの分量(横軸)と学習、評価の精度(縦軸)をプロットしたものです。
 
-![image](https://qiita-image-store.s3.amazonaws.com/0/25990/441770dd-db03-dd82-99d5-98b7ef3cde31.png)
+![learning_curve.PNG](./pictures/learning_curve.PNG)
 
-### 4.1 Check Precision and Recall
+学習の精度が高止まりしている一方、評価の精度が上がってこない場合は過学習の疑いがあります。  
+これは学習データにモデルが適合しすぎているのが問題なので、モデルをシンプルにして過剰な適合ができないようにしたり、過学習を防止するパラメーターを調整することで抑制することができます。
 
-scikit-learnでは[classification_report](http://scikit-learn.org/stable/modules/generated/sklearn.metrics.classification_report.html)関数を使うことで、簡単に確認できます。
-各ラベル(#0～#9)内で、具体的に予測したもののうちどれだけが合っていたのかなどの分析は[confusion_matrix](http://scikit-learn.org/stable/modules/generated/sklearn.metrics.confusion_matrix.html#sklearn.metrics.confusion_matrix)で行うことができます。
+学習の精度が高すぎる場合は、まず過学習を疑うことが重要です。
+
+## 4. Evaluate the Model
+
+今までは「精度」だけをモデルの評価指標としてみてきました。  
+しかし、精度が高いからといっていいモデルとは限りません。
+例えば、「常に○と予測する」モデルであっても、データの70%が○なら精度は70%になります。
+これは当然いいモデルではありませんが、精度だけから見抜くのは困難です。
+
+そこで、精度の詳細な分析を行います。
+
+まず、精度は以下のようなものです。
+
+![accuracy.PNG](./pictures/accuracy.PNG)
+
+これを詳細に分析すると、以下のようになります(○と×の二つに分けるケースを想定しています)。
+
+![analyze.PNG](./pictures/analyze.PNG)
+
+さらに、「予測=>実際」だった割合と、「実際⇒予測された」割合の2つに分けて分析します。
+
+![cf_matrix.PNG](./pictures/cf_matrix.PNG)
+
+これらの割合は、それぞれ「適合率」、「再現率」と呼びます。
+上図にある通り、ほぼ○しか予測しないモデルでは当然実際×なものをほとんど予測しないため、「×の再現率」はとても低くなります。
+これで、不穏な兆候をつかむことができるというわけです。
+
+この分析を、実際に表示させてみましょう。
+
+scikit-learnでは[classification_report](http://scikit-learn.org/stable/modules/generated/sklearn.metrics.classification_report.html)関数を使うことで、簡単に表示できます。  
+数字の分類ではラベルが10個あるので(#0～#9)、10のラベルについてそれぞれ適合率(precision)と再現率(recall)が表示されます。
+
+以下のコードを、Evaluate the Modelの末尾に追加してみましょう。
 
 ```py3
-def show_confusion_matrix(model, dataset):
-    from sklearn.metrics import classification_report
-    
-    predicted = model.predict(dataset.data)
-    target_names = ["#{0}".format(i) for i in range(0, 10)]
+from sklearn.metrics import classification_report
 
-    print(classification_report(dataset.target, predicted, target_names=target_names))
 
-show_confusion_matrix(classifier, digits)
+target_names = ["#{0}".format(i) for i in range(0, 10)]
+print(classification_report(test_t, predicted, target_names=target_names))
 ```
 
 ![image](https://qiita-image-store.s3.amazonaws.com/0/25990/ba6f0580-4093-7d11-0270-bbd0e95a698b.png)
 
+基本的に、適合率と再現率は相反する関係になります。適合率、つまり予測精度を上げようとすれば適当な予測をするわけにはいかないことになりますが、そうすると見逃しも多くなるためです。
+(絶対に打てる球しか打たないバッターは打率は高くなりますが、その分「今打てたのに」というケースも多くなってくるということです)。
+
+結論的にはバランスをとったほうがいいことになるのですが、このバランスさせたスコアが調和平均(f1-score)と呼ばれるものになります。
+なので、f1スコアを見るとそのモデルの良し悪しの大体のことがわかるということです。
+
+以上が、機械学習の基本的なステップとなります。
+今後様々なモデルを検証していくと思いますが、基本的なプロセスは変わりません。上記のプロセスを、良く押さえておいていただければと思います。
